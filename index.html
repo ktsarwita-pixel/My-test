@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#163344">
+  <meta name="description" content="Cast, read the water, and bring home a catch at Moonlit Cove.">
+  <title>Moonlit Cove — pixel fishing</title>
+  <style>
+    :root { color-scheme:dark; --ink:#f8f0d9; --muted:#a9c0bd; --gold:#ffd379; --panel:#142b38; }
+    * { box-sizing:border-box; }
+    html,body { margin:0; min-height:100%; background:#102630; }
+    body { min-height:100svh; display:grid; place-items:center; padding:18px 12px max(18px,env(safe-area-inset-bottom)); color:var(--ink); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    .game { width:min(100%,1000px); }
+    .masthead { display:flex; align-items:end; justify-content:space-between; gap:12px; margin:0 3px 11px; }
+    h1 { margin:0; font-size:clamp(18px,4vw,27px); letter-spacing:.08em; line-height:1; text-transform:uppercase; }
+    h1 span { color:var(--gold); }
+    .place { color:#a8bdba; font-size:10px; letter-spacing:.15em; text-transform:uppercase; white-space:nowrap; }
+    .frame { overflow:hidden; border:2px solid #5c776f; border-radius:7px; background:#132a37; box-shadow:0 18px 50px #07161dbb, inset 0 0 0 2px #203b43; }
+    canvas { display:block; width:100%; height:auto; aspect-ratio:16/9; image-rendering:pixelated; image-rendering:crisp-edges; touch-action:none; cursor:pointer; }
+    .stats { display:flex; justify-content:space-between; gap:8px; padding:10px 14px; border-top:1px solid #35544f; background:#142b38; color:#a9c0bd; font-size:10px; letter-spacing:.09em; text-transform:uppercase; }
+    .stats b { color:var(--gold); font-size:13px; }
+    .controls { display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center; margin-top:12px; }
+    .hint { min-height:44px; color:#a9c0bd; font-size:clamp(11px,2.5vw,13px); line-height:1.5; }
+    .hint strong { color:#fff2d1; }
+    button { min-width:184px; min-height:52px; border:2px solid #ffdfa0; border-radius:5px; background:#efa94e; color:#30251d; box-shadow:0 4px 0 #985c37; font:900 13px/1 ui-monospace,monospace; letter-spacing:.09em; text-transform:uppercase; cursor:pointer; touch-action:none; user-select:none; -webkit-user-select:none; }
+    button:hover { background:#ffc66b; }
+    button:active { transform:translateY(2px); box-shadow:0 2px 0 #985c37; }
+    button:focus-visible { outline:3px solid #fff; outline-offset:4px; }
+    .footer { margin:13px 4px 0; color:#77918e; font-size:10px; line-height:1.5; text-align:center; }
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    @media(max-width:520px) {
+      body { padding-inline:8px; }
+      .controls { grid-template-columns:1fr; gap:8px; }
+      .hint { min-height:34px; }
+      button { width:100%; min-height:58px; }
+      .stats { padding:9px 8px; font-size:8px; letter-spacing:.04em; }
+      .stats b { font-size:11px; }
+      .place { font-size:8px; letter-spacing:.1em; }
+    }
+    @media(prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; } }
+  </style>
+</head>
+<body>
+  <main class="game" aria-label="Moonlit Cove fishing game">
+    <header class="masthead"><h1><span>Moonlit</span> Cove</h1><div class="place">Willowmere Lake · Early morning</div></header>
+    <section class="frame" aria-label="Fishing game">
+      <canvas id="game" width="480" height="270" aria-label="Pixel art fishing game. Hold to cast. Press when a fish bites. While reeling, release the button when the line tension turns red."></canvas>
+      <div class="stats" aria-live="polite"><span>Fish <b id="catch-count">00</b></span><span>Biggest <b id="best-catch">—</b></span><span>Bag <b id="bag-weight">0.0 kg</b></span></div>
+    </section>
+    <div class="controls"><div class="hint" id="hint" aria-live="polite">The lake is waking up. <strong>Hold to cast your line.</strong></div><button id="action" type="button" aria-label="Hold to cast">Hold to cast</button></div>
+    <p class="footer">Hold to cast · Hook on the splash · Reel steadily, then let go when the fish surges</p>
+    <span class="sr-only" id="announcement" aria-live="assertive"></span>
+  </main>
+<script>
+(() => {
+  'use strict';
+  const canvas=document.querySelector('#game'), ctx=canvas.getContext('2d');
+  const button=document.querySelector('#action'), hint=document.querySelector('#hint');
+  const countEl=document.querySelector('#catch-count'), bestEl=document.querySelector('#best-catch'), bagEl=document.querySelector('#bag-weight'), announcement=document.querySelector('#announcement');
+  const W=480,H=270, waterline=106, rod={x:117,y:155};
+  const palette={sky:'#f2a86f', rose:'#d77767', hill:'#8e685e', hillShade:'#674e51', pine:'#31534f', pineDark:'#213e43', shore:'#866856', water:'#388286', waterLight:'#66a89a', deep:'#205b68', foam:'#b5d5b0', ink:'#183944', cream:'#fff0cf'};
+  const fishKinds=[
+    {name:'Pond Minnow',color:'#a8ddd0',belly:'#eaf1cf',weight:38,kg:[.2,.7],value:1,shape:'slim'},
+    {name:'Sun Perch',color:'#f5bd68',belly:'#fff0c4',weight:32,kg:[.5,1.4],value:2,shape:'round'},
+    {name:'Reed Pike',color:'#8dc28c',belly:'#d8e3ae',weight:20,kg:[1.2,3.2],value:4,shape:'long'},
+    {name:'Moon Koi',color:'#e98776',belly:'#fff0d0',weight:9,kg:[2.5,5.5],value:8,shape:'koi'},
+    {name:'Old Lake Sturgeon',color:'#a4a9c4',belly:'#e2d9ba',weight:1,kg:[6,12],value:20,shape:'long'}
+  ];
+  let phase='idle', t=0, phaseT=0, delta=0, charge=0, castPower=.55, bobberX=330, waitLeft=0, biteLeft=0;
+  let fish=fishKinds[0], fishX=340, hookedProgress=0, tension=.12, snapTime=0, fightT=0, inputHeld=false, missCount=0;
+  let particles=[], ripples=[], caught=Number(localStorage.getItem('moonlit-fish-count')||0), bag=Number(localStorage.getItem('moonlit-bag-kg')||0);
+  let best=JSON.parse(localStorage.getItem('moonlit-best')||'null'), bestText=best?`${best.name} ${best.kg.toFixed(1)}kg`:'—';
+  let toast='', toastTimer=0, last=0;
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const rect=(x,y,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));};
+  function polygon(points,color){ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);ctx.closePath();ctx.fill();}
+  function line(x1,y1,x2,y2,color,width=1){ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+  function label(str,x,y,size=9,color=palette.cream,align='center'){ctx.fillStyle=color;ctx.font=`bold ${size}px ui-monospace,monospace`;ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillText(str,x,y);}
+  function setPhase(value){phase=value;syncUI();}
+  function syncUI(){
+    const ui={idle:['Hold to cast','The lake is waking up. <strong>Hold to cast your line.</strong>'],charge:['Casting…','Pick your distance. <strong>Release to send it out.</strong>'],cast:['Line away…','A good cast. <strong>Watch the bobber.</strong>'],wait:['Waiting for a bite…','Give it a moment. <strong>The ripples will tell you.</strong>'],bite:['Hook it!','There! <strong>Press now, while the bobber is under!</strong>'],fight:['Hold to reel','Reel against the fish. <strong>Let go when the tension flashes red.</strong>'],landed:['Cast again','A fine catch. <strong>The lake has more stories.</strong>'],lost:['Cast again','The line went slack. <strong>Take a breath and cast again.</strong>']};
+    const [title,copy]=ui[phase];button.textContent=title;button.setAttribute('aria-label',title);button.disabled=phase==='cast'||phase==='wait';hint.innerHTML=copy;
+    countEl.textContent=String(caught).padStart(2,'0');bestEl.textContent=bestText;bagEl.textContent=`${bag.toFixed(1)} kg`;
+  }
+  function addRipple(x,y,life=1.2){ripples.push({x,y,life,max:life,r:2});}
+  function splash(x,y,color=palette.foam,n=10){for(let i=0;i<n;i++)particles.push({x,y,vx:rand(-2.2,2.2),vy:rand(-3.5,-.4),life:rand(.35,.85),color,size:Math.random()<.6?2:3});for(let i=0;i<3;i++)addRipple(x+rand(-4,4),y+rand(-1,2),rand(.6,1.2));}
+  function chooseFish(){let n=Math.random()*fishKinds.reduce((a,f)=>a+f.weight,0);return fishKinds.find(f=>(n-=f.weight)<=0)||fishKinds[0];}
+  function press(){
+    if(phase==='idle'||phase==='landed'||phase==='lost'){
+      phase='charge';phaseT=0;charge=0;inputHeld=true;syncUI();return;
+    }
+    if(phase==='bite'){
+      inputHeld=true;phase='fight';phaseT=0;fightT=0;hookedProgress=0;tension=.23;snapTime=0;fishX=bobberX-2;splash(bobberX,waterline+3,fish.color,13);announcement.textContent=`Hooked a ${fish.name}. Reel carefully, and ease off when tension is high.`;syncUI();return;
+    }
+    if(phase==='charge'){inputHeld=true;return;}
+    if(phase==='fight'){inputHeld=true;return;}
+  }
+  function release(){
+    if(!inputHeld)return; inputHeld=false;
+    if(phase==='charge'){castPower=Math.max(.18,Math.min(1,charge));bobberX=218+castPower*228;phase='cast';phaseT=0;syncUI();}
+  }
+  function loseFish(){phase='lost';phaseT=0;inputHeld=false;missCount++;splash(bobberX,waterline+3,'#d6ded0',8);announcement.textContent='The fish escaped.';syncUI();}
+  function landFish(){
+    phase='landed';phaseT=0;inputHeld=false;caught++;
+    const kg=rand(fish.kg[0],fish.kg[1]);bag+=kg;
+    if(!best||kg>best.kg){best={name:fish.name,kg};bestText=`${fish.name} ${kg.toFixed(1)}kg`;localStorage.setItem('moonlit-best',JSON.stringify(best));}
+    localStorage.setItem('moonlit-fish-count',String(caught));localStorage.setItem('moonlit-bag-kg',String(bag));
+    toast=`${fish.name} · ${kg.toFixed(1)} kg`;toastTimer=2.5;
+    splash(bobberX,waterline+2,fish.color,18);announcement.textContent=`You landed a ${kg.toFixed(1)} kilogram ${fish.name}.`;syncUI();
+  }
+  function tapAction(){if(phase==='bite')press();else if(phase==='idle'||phase==='landed'||phase==='lost'){press();release();}else if(phase==='charge')release();}
+  function bindHold(el){
+    el.addEventListener('pointerdown',e=>{e.preventDefault();if(el.setPointerCapture)el.setPointerCapture(e.pointerId);press();},{passive:false});
+    el.addEventListener('pointerup',e=>{e.preventDefault();release();},{passive:false});
+    el.addEventListener('pointercancel',release);el.addEventListener('lostpointercapture',release);
+    el.addEventListener('click',e=>{if(e.detail===0)tapAction();});
+  }
+  bindHold(button);bindHold(canvas);
+  window.addEventListener('pointerup',release);window.addEventListener('pointercancel',release);
+  window.addEventListener('keydown',e=>{if((e.code==='Space'||e.code==='Enter')&&!e.repeat){e.preventDefault();press();}});
+  window.addEventListener('keyup',e=>{if(e.code==='Space'||e.code==='Enter'){e.preventDefault();release();}});
+  window.addEventListener('blur',release);
+
+  function drawSky(){
+    const grad=ctx.createLinearGradient(0,0,0,125);grad.addColorStop(0,'#f4c18a');grad.addColorStop(.58,'#eb9675');grad.addColorStop(1,'#bd6e68');ctx.fillStyle=grad;ctx.fillRect(0,0,W,waterline+3);
+    // sunrise behind the far ridge
+    ctx.fillStyle='#ffe0a0';ctx.beginPath();ctx.arc(350,93,27,Math.PI,Math.PI*2);ctx.fill();
+    rect(0,88,W,4,'#efb07a');
+    // long, broken clouds
+    for(let i=0;i<6;i++){let x=(i*103-(t*.008)%560+560)%560-30,y=24+(i*29)%48;rect(x,y,38+(i%3)*12,3,'#f7d0a0');rect(x+9,y-4,23,3,'#f7d0a0');rect(x+5,y+4,47,2,'#df987c');}
+    polygon([[0,105],[0,87],[33,68],[53,80],[82,57],[101,70],[132,59],[165,82],[190,73],[220,91],[252,67],[281,82],[310,62],[343,84],[372,68],[408,88],[443,60],[480,79],[480,111]],palette.hill);
+    polygon([[0,102],[34,87],[52,90],[82,66],[99,79],[131,64],[164,87],[191,78],[218,95],[252,73],[280,88],[308,69],[342,90],[374,75],[407,94],[442,68],[480,88],[480,112]],palette.hillShade);
+    // far treeline
+    rect(0,99,W,10,'#49685d');
+    for(let x=0;x<W;x+=12){let h=7+((x*13)%9);polygon([[x,104-h],[x+5,94-h],[x+10,104-h],[x+8,104-h],[x+8,108],[x+2,108],[x+2,104]],x%3?'#355950':'#284b4b');}
+    // lakeside cottage and amber window
+    rect(36,76,39,27,'#76544b');polygon([[30,78],[55,59],[82,78]],'#4d4546');rect(42,83,9,12,'#efbd78');rect(55,84,6,7,'#573f43');rect(36,75,40,4,'#9b6653');rect(48,67,6,8,'#d7a47c');rect(50,69,2,6,'#575052');
+  }
+  function drawWater(){
+    const grad=ctx.createLinearGradient(0,waterline,0,H);grad.addColorStop(0,'#468d87');grad.addColorStop(.36,'#30777d');grad.addColorStop(1,'#174e61');ctx.fillStyle=grad;ctx.fillRect(0,waterline,W,H-waterline);
+    // broken sunrise reflection
+    for(let i=0;i<19;i++){let y=waterline+8+i*6,x=320+Math.sin(i*5+t*.001)*22,w=Math.max(4,53-i*2);rect(x-w/2,y,w,1,i%3?'#78aa91':'#d4b17b');}
+    for(let y=112;y<H;y+=9){let shift=(t*.014+y*2.7)%55;for(let x=-60+shift;x<W;x+=55){let w=6+(Math.sin(x*3+y)*.5+.5)*(y>190?25:18);rect(x,y,w,1,y%18===4?'#72a89a':'#41847f');}}
+    rect(0,waterline,W,2,'#a8b58b');rect(0,waterline+3,W,1,'#73a18a');
+    // shore strip and reeds around the edges
+    polygon([[0,104],[120,105],[197,115],[0,123]],'#8c765e');polygon([[0,110],[112,111],[168,119],[0,127]],'#6d6656');
+    for(const [x,y,h] of [[12,150,25],[29,166,18],[455,154,27],[472,142,33],[442,181,19],[91,120,13]]){
+      rect(x,y,2,h,'#315b4f');rect(x-5,y+5,7,2,'#497358');rect(x+2,y-4,6,2,'#61815d');rect(x+3,y+12,7,2,'#42694f');
+    }
+    // lily pads and tiny blossoms
+    [[304,171],[390,218],[277,235]].forEach(([x,y],i)=>{ctx.fillStyle='#397259';ctx.beginPath();ctx.ellipse(x,y,9,4,.1,0,Math.PI*2);ctx.fill();rect(x+5,y-1,3,2,'#91aa70');if(!i)rect(x-2,y-5,2,2,'#f4ded0');});
+    // little shoreline stones
+    for(let i=0;i<9;i++){let x=i*18+5;rect(x,114+(x%3),5,2,i%2?'#be9a73':'#dfb58a');}
+  }
+  function drawDock(){
+    // old timber pier, cut in perspective
+    polygon([[0,159],[123,146],[159,158],[16,183]],'#8e654d');
+    polygon([[0,154],[123,141],[159,153],[16,178]],'#c08a5c');
+    polygon([[0,151],[123,138],[159,150],[16,175]],'#d49a64');
+    for(let i=0;i<8;i++){let x=i*20-7,y=151-i*2.1;line(x,y,x+19,y+4,'#a97852',1);rect(x+4,y+1,2,2,'#573f3a');}
+    for(const [x,y] of [[18,178],[137,158],[75,165]]){rect(x,y,5,34,'#684a3d');rect(x-2,y+30,9,3,'#4e403a');}
+    // coil of spare rope and tackle tin
+    for(let r=0;r<3;r++){ctx.strokeStyle=r===1?'#d7b879':'#a88055';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(32,166,7-r,3-r*.4,0,0,Math.PI*2);ctx.stroke();}
+    rect(54,151,12,8,'#5b7d77');rect(56,148,8,3,'#d9b574');rect(58,154,3,3,'#f0d996');
+  }
+  function drawAngler(){
+    const bob=Math.sin(t*.004)*1.2, x=95, y=131+bob;
+    // cast shadow / seated body
+    rect(x-13,y+27,28,4,'#403e40');rect(x+2,y+24,13,4,'#4d4743');
+    // boots, bent legs
+    rect(x-8,y+22,11,5,'#554b45');rect(x+1,y+20,12,4,'#6a5144');rect(x+9,y+22,8,4,'#493f3b');
+    // rolled-up trousers
+    rect(x-5,y+13,11,9,'#52675e');rect(x+6,y+12,8,9,'#405a55');rect(x+1,y+20,8,3,'#c28a5d');
+    // jacket with pixel light and cuffs
+    rect(x-9,y+1,20,15,'#42766e');rect(x-12,y+5,5,9,'#42766e');rect(x+10,y+4,6,8,'#56877a');
+    rect(x-7,y+3,4,9,'#649080');rect(x,y+5,2,9,'#294e4d');rect(x-11,y+11,5,3,'#e6b879');rect(x+12,y+10,5,3,'#e6b879');
+    // neck, face, ear, hair
+    rect(x-2,y-5,8,7,'#d99569');rect(x-1,y-2,8,2,'#f1bb83');rect(x+7,y-4,2,4,'#c77d60');rect(x-3,y-9,14,10,'#edb47f');rect(x+5,y-7,2,2,'#283e43');
+    rect(x-4,y-12,15,5,'#6c483b');rect(x-7,y-9,17,3,'#8c5e43');rect(x-4,y-14,12,3,'#c18b54');rect(x-2,y-17,8,3,'#d8a96b');rect(x-1,y-17,2,2,'#f0d39a');
+    // extended sleeve and hand on rod
+    rect(x+10,y+3,10,4,'#42766e');rect(x+18,y+2,4,4,'#edb47f');
+    // rod, reel and line
+    line(x+18,y+4,x+38,y-39,'#503d36',2);line(x+20,y+4,x+36,y-37,'#d09b59',1);
+    ctx.strokeStyle='#dbc99b';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+36,y-37);ctx.quadraticCurveTo(x+76,y-10,bobberX,waterline+2);ctx.stroke();
+    rect(x+17,y+6,4,4,'#d4b16b');rect(x+18,y+10,5,2,'#795344');
+  }
+  function drawFishSprite(x,y,scale=1,dir=-1,alpha=1){
+    ctx.save();ctx.globalAlpha=alpha;ctx.translate(Math.round(x),Math.round(y));ctx.scale(scale*dir,scale);
+    const f=fish,c=f.color,b=f.belly;
+    if(f.shape==='round'){
+      polygon([[-14,0],[-8,-8],[4,-9],[12,-4],[15,0],[10,7],[-3,9],[-10,5],[-15,3]],c);
+      polygon([[-5,3],[4,4],[10,1],[7,7],[-2,8]],b);polygon([[-9,0],[-16,-6],[-14,0],[-16,6]],'#de9b58');
+      polygon([[-2,-8],[3,-14],[7,-8]],'#dc9a56');polygon([[1,7],[6,12],[8,6]],'#dc9a56');
+      for(let i=0;i<3;i++)rect(-4+i*4,-4+(i%2)*4,2,2,'#fff0bc');
+    } else if(f.shape==='koi'){
+      polygon([[-18,0],[-10,-7],[2,-8],[14,-4],[18,0],[12,7],[1,9],[-11,5]],'#f5eee0');
+      polygon([[-5,-7],[0,-10],[8,-7],[5,-2],[-2,-1]],c);polygon([[5,2],[12,2],[8,7],[2,7]],c);
+      polygon([[-11,0],[-19,-6],[-17,0],[-20,7]],'#e5a868');polygon([[0,-8],[5,-13],[8,-7]],'#e5a868');
+      rect(10,-3,2,2,'#253d44');
+    } else {
+      let long=f.shape==='long';
+      polygon([[-17,0],[-9,-6],[-2,-8],[8,-6],[15,-2],[17,0],[11,5],[1,7],[-9,5]],c);
+      polygon([[-3,3],[7,4],[12,1],[9,6],[0,7]],b);
+      polygon([[-10,0],[-19,-6],[-17,0],[-20,6]],long?'#a6ae74':'#7bb4a8');
+      polygon([[-1,-6],[4,-11],[8,-6]],long?'#729b6d':'#71a69a');polygon([[4,5],[8,10],[10,4]],'#789d78');
+      if(long){rect(-2,-2,3,2,'#c1c89a');rect(3,1,3,2,'#879f77');rect(-6,2,3,2,'#d6d3a6');}
+    }
+    rect(10,-3,2,2,'#fff2cb');rect(11,-2,1,1,'#1c3740');line(6,-1,10,1,'#405b53',1);ctx.restore();
+  }
+  function drawUnderwater(){
+    if(phase==='wait'||phase==='bite'){
+      let approach=phase==='bite'?1:Math.max(0,1-waitLeft/5);
+      fishX=bobberX+55-approach*42+Math.sin(t*.002)*5;
+      drawFishSprite(fishX,waterline+31+Math.sin(t*.003)*3,.82,-1,.27+approach*.4);
+    }
+    if(phase==='fight'||phase==='landed'){
+      let yy=phase==='landed'?waterline-2:waterline+32+Math.sin(t*.014)*7;
+      drawFishSprite(fishX,yy,fish.shape==='long'?1.18:1.04,Math.sin(t*.005)>0?1:-1,.95);
+    }
+  }
+  function drawBobber(){
+    if(!['wait','bite','fight','landed'].includes(phase))return;
+    let dip=phase==='bite'?8+Math.sin(t*.04)*2:phase==='fight'?Math.sin(t*.03)*2:0;
+    let x=phase==='fight'?bobberX-hookedProgress*45:bobberX,y=waterline+2+dip;
+    ctx.strokeStyle='#fff0cf';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(rod.x+36,rod.y-37);ctx.quadraticCurveTo((rod.x+bobberX)/2,rod.y-10,x,y);ctx.stroke();
+    for(let i=0;i<3;i++){ctx.strokeStyle=`rgba(196,226,192,${.45-i*.12})`;ctx.beginPath();ctx.ellipse(x,y+4,6+i*5,2+i,0,0,Math.PI*2);ctx.stroke();}
+    rect(x-2,y-7,4,5,'#f8efcf');rect(x-3,y-3,6,4,'#e9886d');rect(x-2,y+1,4,2,'#b95b56');
+    if(phase==='bite'){ctx.strokeStyle='#ffe08d';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,12+Math.sin(t*.035)*4,0,Math.PI*2);ctx.stroke();}
+  }
+  function drawStatus(){
+    if(phase==='charge'){
+      rect(162,19,156,31,'#183c45');rect(164,21,152,27,'#28544e');label('CAST DISTANCE',240,29,8,'#fff0cf');rect(174,38,132,5,'#19353c');rect(176,39,Math.max(2,128*charge),3,charge>.82?'#f2a965':'#e9d184');
+      for(let i=0;i<5;i++)rect(176+i*26,38,1,5,'#a6ba91');
+    }else if(phase==='bite'){
+      rect(156,17,168,30,'#76474a');rect(159,20,162,24,'#a85b55');label('BITE!  SET THE HOOK',240,32,9,'#fff1c9');
+    }else if(phase==='fight'){
+      rect(148,15,184,42,'#173a43');label('LINE TENSION',240,25,8,'#e5edcf');rect(160,34,160,10,'#112b37');
+      rect(162,36,100,6,'#65a987');rect(262,36,28,6,'#e7c267');rect(290,36,28,6,'#dc7161');
+      const marker=162+Math.min(156,Math.max(0,tension*156));rect(marker-2,32,4,14,'#fff4d7');
+      label(tension>.82?'LET GO!':(Math.sin(fightT*2.4)>.55?'FISH SURGING':'REEL IN'),240,53,7,tension>.82?'#ff9e80':'#e6edcf');
+    }else if(phase==='landed'||phase==='lost'){
+      rect(155,18,170,29,'#173a43');label(phase==='landed'?`LANDED: ${fish.name.toUpperCase()}`:'THE FISH GOT AWAY',240,32,8,phase==='landed'?'#ffe29b':'#efd8bd');
+    }
+    if(toastTimer>0&&phase==='landed'){rect(161,64,158,20,'#1e484b');label(toast,240,74,8,'#ffdf9a');}
+  }
+  function drawEffects(){
+    particles=particles.filter(p=>p.life>0);for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life-=delta;rect(p.x,p.y,p.size,p.size,p.color);}
+    ripples=ripples.filter(r=>r.life>0);for(const r of ripples){r.life-=delta;r.r+=delta*12;ctx.strokeStyle=`rgba(207,230,190,${Math.max(0,r.life/r.max)*.55})`;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(r.x,r.y,r.r,r.r*.32,0,0,Math.PI*2);ctx.stroke();}
+  }
+  function draw(){drawSky();drawWater();drawDock();drawUnderwater();drawAngler();drawBobber();drawEffects();drawStatus();}
+  function update(dt){
+    phaseT+=dt;
+    if(phase==='charge'&&inputHeld)charge=Math.min(1,charge+dt*.58);
+    if(phase==='cast'&&phaseT>.68){phase='wait';phaseT=0;waitLeft=rand(3.1,5.4);fish=chooseFish();fishX=bobberX+64;syncUI();}
+    else if(phase==='wait'){waitLeft-=dt;if(waitLeft<=0){phase='bite';biteLeft=1.55;splash(bobberX,waterline+2,'#c8e5c0',8);announcement.textContent='Fish on! Press now to set the hook.';syncUI();}}
+    else if(phase==='bite'){biteLeft-=dt;if(biteLeft<=0){phase='wait';waitLeft=rand(2.8,5.2);missCount++;syncUI();}}
+    else if(phase==='fight'){
+      fightT+=dt;
+      const surge=Math.sin(fightT*2.5)>.55;
+      if(inputHeld){hookedProgress+=dt*(surge?.17:.37);tension+=dt*(surge?.71:.34);}
+      else{tension=Math.max(.08,tension-dt*1.12);hookedProgress=Math.max(0,hookedProgress-dt*.012);}
+      tension=Math.min(1.12,tension);
+      if(tension>.94)snapTime+=dt;else snapTime=0;
+      fishX=bobberX-hookedProgress*48+Math.sin(fightT*5)*5;
+      if(snapTime>.43){loseFish();}
+      else if(hookedProgress>=1){landFish();}
+    }
+    if(phase==='landed'||phase==='lost'){if(phaseT>3.2){phase='idle';phaseT=0;syncUI();}}
+    if(toastTimer>0)toastTimer=Math.max(0,toastTimer-dt);
+  }
+  function loop(now){delta=Math.min(.05,(now-last)/1000||0);last=now;t+=delta;update(delta);draw();requestAnimationFrame(loop);}
+  syncUI();requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
