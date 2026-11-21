@@ -59,7 +59,6 @@
   const button=document.querySelector('#action'), hint=document.querySelector('#hint');
   const countEl=document.querySelector('#catch-count'), bestEl=document.querySelector('#best-catch'), bagEl=document.querySelector('#bag-weight'), announcement=document.querySelector('#announcement');
   const W=480,H=270, waterline=134, rod={x:184,y:135};
-  const backdrop=new Image();backdrop.src='assets/willowmere-dawn.png';
   const palette={sky:'#f2a86f', rose:'#d77767', hill:'#8e685e', hillShade:'#674e51', pine:'#31534f', pineDark:'#213e43', shore:'#866856', water:'#388286', waterLight:'#66a89a', deep:'#205b68', foam:'#b5d5b0', ink:'#183944', cream:'#fff0cf'};
   const fishKinds=[
     {name:'Pond Minnow',color:'#a8ddd0',belly:'#eaf1cf',weight:38,kg:[.2,.7],value:1,shape:'slim'},
@@ -123,14 +122,70 @@
   window.addEventListener('keyup',e=>{if(e.code==='Space'||e.code==='Enter'){e.preventDefault();release();}});
   window.addEventListener('blur',release);
 
+  function drawPine(x,base,size,color,shade){
+    const trunk=size*.11;rect(x-trunk/2,base-size*.18,trunk,size*.2,'#493f3a');
+    for(let tier=0;tier<4;tier++){
+      const top=base-size*(.98-tier*.2),half=size*(.2+tier*.055),bottom=top+size*.29;
+      polygon([[x,top],[x-half, bottom],[x-half*.55,bottom-size*.035],[x-half*.82,bottom+size*.035],[x+half*.82,bottom+size*.035],[x+half*.55,bottom-size*.035],[x+half,bottom]],tier%2?shade:color);
+      rect(x-half*.46,top+size*.13,Math.max(1,half*.18),Math.max(1,size*.13),'#89a078');
+    }
+  }
   function drawBackdrop(){
-    if(backdrop.complete&&backdrop.naturalWidth){ctx.drawImage(backdrop,0,0,W,H);return;}
-    // A quiet fallback keeps the game playable while the pixel-art backdrop loads.
-    const sky=ctx.createLinearGradient(0,0,0,waterline);sky.addColorStop(0,'#e9a47a');sky.addColorStop(1,'#c7776f');ctx.fillStyle=sky;ctx.fillRect(0,0,W,waterline);
-    const lake=ctx.createLinearGradient(0,waterline,0,H);lake.addColorStop(0,'#478a83');lake.addColorStop(1,'#174c5d');ctx.fillStyle=lake;ctx.fillRect(0,waterline,W,H-waterline);
-    polygon([[0,waterline],[76,71],[132,95],[212,61],[284,100],[354,66],[480,101],[480,waterline]],'#536c61');
-    polygon([[0,waterline],[79,85],[155,104],[265,73],[340,106],[418,80],[480,107],[480,waterline]],'#324f4b');
-    polygon([[0,218],[222,180],[260,194],[36,270],[0,270]],'#b57f59');
+    // Banded peach dawn, built entirely from crisp canvas shapes.
+    rect(0,0,W,26,'#f8d4a5');rect(0,26,W,25,'#f3bc94');rect(0,51,W,29,'#e99a80');rect(0,80,W,27,'#d87d76');rect(0,107,W,waterline-107,'#b66970');
+    // Sunrise disk and little stepped cloud banks.
+    ctx.fillStyle='#ffe3a4';ctx.beginPath();ctx.arc(354,111,25,Math.PI,Math.PI*2);ctx.fill();rect(329,110,50,7,'#ffd69b');rect(334,103,40,3,'#ffe5b4');
+    for(let i=0;i<5;i++){
+      const x=((i*117-t*.006)%570+570)%570-35,y=22+(i*23)%42,w=26+(i%3)*14;
+      rect(x,y,w,3,'#f9d8b1');rect(x+6,y-4,w*.55,3,'#f9d8b1');rect(x+11,y+4,w*.72,2,'#e9aa91');
+    }
+    // Distant lavender mountain range with lit facets.
+    polygon([[0,122],[0,91],[31,72],[55,88],[83,58],[108,77],[137,65],[168,91],[199,77],[229,103],[263,69],[290,90],[322,61],[351,88],[381,68],[413,91],[447,55],[480,79],[480,133]],'#926c75');
+    polygon([[0,120],[31,78],[51,94],[83,63],[103,84],[137,69],[167,96],[199,81],[228,108],[263,75],[286,97],[322,66],[348,94],[381,73],[411,97],[447,61],[480,85],[480,134]],'#aa7880');
+    polygon([[64,81],[83,58],[103,84],[92,76],[83,68],[76,79]],'#e9b296');polygon([[300,82],[322,61],[348,94],[331,78],[322,69],[315,80]],'#ecc09b');polygon([[427,78],[447,55],[468,80],[454,70],[447,62],[440,73]],'#e8b18f');
+    // Dark fir line layered across the far shore.
+    polygon([[0,129],[0,111],[12,119],[22,100],[31,116],[43,91],[55,117],[69,101],[82,120],[94,96],[108,121],[124,105],[137,124],[151,100],[164,123],[181,105],[196,126],[212,99],[228,125],[244,106],[261,126],[277,94],[294,122],[310,100],[327,127],[344,103],[361,125],[380,98],[398,122],[414,96],[430,123],[447,91],[463,119],[480,101],[480,140]],'#31544e');
+    for(let i=0;i<18;i++){let x=i*29-9,h=13+(i*17%18);drawPine(x,133,h,'#294a48','#233f43');}
+    // Water bands and far-shore reflections.
+    rect(0,waterline,W,H-waterline,'#286873');rect(0,waterline,W,14,'#57948c');rect(0,waterline+14,W,24,'#387d7e');rect(0,waterline+38,W,30,'#286b75');rect(0,waterline+68,W,34,'#205c6c');rect(0,waterline+102,W,H-(waterline+102),'#194d60');
+    rect(0,waterline,W,2,'#a5b48e');
+    // Sun-road: broken warm pixels, narrower toward the horizon.
+    for(let i=0;i<13;i++){let y=waterline+5+i*5,w=18+i*2,x=354-w/2+Math.sin(i*1.7)*8;rect(x,y,w,1,i%3?'#d9b178':'#f0ca91');if(i%2===0)rect(x+5,y+2,w*.48,1,'#b5b58d');}
+    // Shore banks form a quiet inlet around the lake.
+    polygon([[0,121],[24,119],[61,123],[94,122],[125,128],[157,137],[130,145],[72,143],[0,137]],'#7e7660');
+    polygon([[0,127],[45,125],[86,129],[128,135],[102,140],[51,139],[0,135]],'#a18868');
+    polygon([[389,134],[425,125],[458,119],[480,122],[480,143],[439,140],[410,139]],'#687258');
+    polygon([[417,133],[451,126],[480,126],[480,137],[445,138]],'#938063');
+    // Cabin, chimney smoke and warm little window on the west bank.
+    rect(23,91,46,32,'#765344');rect(27,96,38,25,'#a87552');rect(32,101,28,19,'#be895b');
+    polygon([[17,96],[43,75],[75,94],[71,99],[43,82],[22,101]],'#443d42');polygon([[22,96],[44,79],[70,94],[65,97],[44,84],[27,100]],'#65494a');
+    rect(35,103,11,12,'#ffd383');rect(39,103,2,12,'#795047');rect(35,108,11,2,'#795047');rect(54,104,7,16,'#584248');rect(55,106,2,12,'#bb8a62');
+    rect(27,94,39,3,'#d29a68');rect(53,80,7,13,'#59454a');rect(52,77,9,3,'#d6a274');rect(54,74,6,3,'#9f7480');
+    // Three faint rising smoke wisps drift one pixel at a time.
+    ctx.save();ctx.globalAlpha=.38;
+    for(let i=0;i<4;i++){let sy=72-i*8+Math.sin(t*.002+i)*2,sx=57+Math.sin(t*.003+i*1.4)*4;rect(sx,sy,4,3,'#f3c9a5');rect(sx+2,sy-3,3,2,'#f3c9a5');}
+    ctx.restore();
+    // Near and far pines add framing and scale to the shore.
+    [[-3,143,61],[14,137,48],[81,132,38],[112,138,30],[391,136,34],[422,137,48],[455,142,65],[483,143,48]].forEach((a,i)=>drawPine(a[0],a[1],a[2],i%2?'#31594e':'#274941',i%2?'#24463f':'#203e3d'));
+    // Perspective dock with dark side, rim-lit boards, posts and iron nail heads.
+    polygon([[0,266],[197,188],[247,195],[36,270],[0,270]],'#493e3c');
+    polygon([[0,260],[197,182],[243,188],[37,269],[0,270]],'#9a684d');
+    polygon([[0,253],[198,177],[239,183],[36,263],[0,270]],'#cb9462');
+    polygon([[0,256],[198,181],[234,186],[35,266],[0,270]],'#d9a36a');
+    for(let i=0;i<10;i++){
+      const x=i*23-5,y=253-i*7.6;
+      line(x,y,x+19,y+7,'#aa7653',1);line(x+2,y-2,x+19,y+4,'#edbc7b',1);
+      rect(x+5,y+1,2,2,'#4c4140');rect(x+6,y+1,1,1,'#e4bd82');
+    }
+    for(const [x,y,h] of [[13,241,33],[224,178,38],[70,214,40]]){rect(x,y,6,h,'#64483d');rect(x-2,y+h-4,10,4,'#493d3b');rect(x,y,2,4,'#bd8d60');}
+    // Rope coil and tackle tin sit on the nearest boards.
+    for(let r=0;r<3;r++){ctx.strokeStyle=r===1?'#e2bd7c':'#956a4a';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(31,248,9-r*2,4-r*.6,-.28,0,Math.PI*2);ctx.stroke();}
+    rect(52,235,13,9,'#3f716f');rect(54,233,9,3,'#e2bd7c');rect(57,238,4,3,'#f2d49a');
+    // Reeds, lily pads and two tiny flowers break up the waterline.
+    for(const [x,y,h] of [[8,166,25],[22,176,19],[54,151,17],[416,155,25],[449,167,21],[470,149,35],[390,141,11]]){
+      line(x,y+h,x+Math.sin(t*.002+x)*2,y,'#315d50',2);line(x,y+h-6,x-5,y+4,'#527a57',2);line(x,y+h-12,x+6,y-2,'#66835b',2);rect(x-1,y-1,3,3,'#a1a36e');
+    }
+    [[75,157],[344,186],[400,224]].forEach(([x,y],i)=>{ctx.fillStyle='#547b57';ctx.beginPath();ctx.ellipse(x,y,9,4,.05,0,Math.PI*2);ctx.fill();rect(x+3,y-1,3,2,'#acc084');if(i<2){rect(x-2,y-5,2,2,'#f4d4bd');rect(x,y-7,2,2,'#fff0c8');}});
   }
   function drawWater(){
     // Moving flecks catch the sunrise without obscuring the painted water.
@@ -151,7 +206,8 @@
   function drawAngler(){
     const breath=Math.sin(t*.003)*.7;
     const lean=phase==='charge'?charge*4:phase==='fight'?Math.min(1,tension)*3:0;
-    const x=136+breath+lean, base=211+breath;
+    const x=136+breath+lean, base=211+breath, spriteScale=.74;
+    ctx.save();ctx.translate(x*(1-spriteScale),base*(1-spriteScale));ctx.scale(spriteScale,spriteScale);
     // Soft contact shadow; knees, rolled cuffs and worn little boots.
     ctx.fillStyle='rgba(15,37,42,.42)';ctx.beginPath();ctx.ellipse(x+2,base+4,24,5,0,0,Math.PI*2);ctx.fill();
     rect(x-15,base-3,12,5,'#493f3b');rect(x-13,base-6,12,4,'#6f5142');rect(x+4,base-5,15,5,'#4a3e39');rect(x+8,base-8,12,4,'#765544');
@@ -181,11 +237,12 @@
     if(phase==='charge')tipY-=charge*12;
     if(phase==='cast'){const p=Math.min(1,phaseT/.68);tipY=base-91+p*24;tipX+=Math.sin(p*Math.PI)*7;}
     if(phase==='fight'){tipX+=Math.min(1,tension)*12;tipY+=Math.min(1,tension)*23;}
-    rod.x=tipX;rod.y=tipY;
+    rod.x=x+(tipX-x)*spriteScale;rod.y=base+(tipY-base)*spriteScale;
     ctx.strokeStyle='#493b35';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(startX-1,startY+2);ctx.quadraticCurveTo(x+45,base-62,tipX,tipY);ctx.stroke();
     ctx.strokeStyle='#c9985d';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(startX,startY);ctx.quadraticCurveTo(x+44,base-65,tipX,tipY);ctx.stroke();
     rect(startX-5,startY+4,8,8,'#d4ae67');ctx.strokeStyle='#e6c77e';ctx.lineWidth=2;ctx.beginPath();ctx.arc(startX-1,startY+8,4,0,Math.PI*2);ctx.stroke();
     rect(x-1,base-53,3,2,'#f2d39a');
+    ctx.restore();
   }
   function drawFishSprite(x,y,scale=1,dir=-1,alpha=1){
     ctx.save();ctx.globalAlpha=alpha;ctx.translate(Math.round(x),Math.round(y));ctx.scale(scale*dir,scale);
