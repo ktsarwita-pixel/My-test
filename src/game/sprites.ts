@@ -320,7 +320,8 @@ export function makeFish(look: FishLook): FishSprite {
       if (look.skeleton && (x + y) % 2 === 1 && d > 1) continue;
       // swept fin ray shading
       const ray = Math.round(d - t * 2) % 3 === 0;
-      g.set(x, y, look.skeleton ? bone : ray ? finHi : t > 0.75 ? finDark : look.fin);
+      const finCol = ray ? adj(look.fin, -0.28) : t > 0.8 ? finDark : look.fin;
+      g.set(x, y, look.skeleton ? bone : finCol);
     }
   }
 
@@ -354,10 +355,11 @@ export function makeFish(look: FishLook): FishSprite {
           const rx = x - Math.floor(k * 0.45);
           if (look.skeleton && k % 2 === 0) continue;
           const isSpine = (x + k) % 3 === 0 || k === hh;
+          const mem = (x + k) % 2 === 0 ? look.fin : adj(look.fin, 0.09);
           g.set(
             rx,
             Math.round(yt) - k,
-            look.skeleton ? bone : isSpine ? finHi : look.fin
+            look.skeleton ? bone : isSpine ? finHi : mem
           );
         }
       }
@@ -425,32 +427,39 @@ export function makeFish(look: FishLook): FishSprite {
         const rib = (x - xPed) % 3 === 1 && Math.abs(dy) < 0.82 && u < 0.68;
         const skull = u >= 0.68 && dy < 0.55;
         const tailBone = u < 0.18 && Math.abs(y - yMid) <= 1.1;
-        if (onSpine || rib || skull || tailBone) g.set(x, y, bone);
+        if (onSpine || rib || skull || tailBone) {
+          g.set(x, y, rib && !onSpine ? adj(bone, -0.14) : bone);
+        }
         continue;
       }
 
-      let col = dy < -0.38 ? look.dark : dy > 0.32 ? look.belly : look.body;
+      // Rich counter-shading: dark back -> mid flank -> pale belly in soft bands
+      let col: string;
+      if (dy < -0.62) col = adj(look.dark, -0.08);
+      else if (dy < -0.38) col = look.dark;
+      else if (dy < -0.05) col = look.body;
+      else if (dy < 0.32) col = adj(look.body, 0.06);
+      else if (dy < 0.62) col = look.belly;
+      else col = adj(look.belly, -0.06);
       if (look.stripes && (x - xPed) % 5 === 2 && dy < 0.45 && u < 0.72) col = look.stripes;
       if (look.spots && rnd() < 0.11 && dy < 0.25) col = look.spots;
 
-      // Subtle fish scale shimmer & counter-shading
+      // Diamond scale texture with shimmer + edge shadow
       let amt = 0;
-      if (
-        look.len >= 16 &&
-        u > 0.12 &&
-        u < 0.72 &&
-        (x - xPed + ((y >> 1) & 1) * 2) % 4 === 0 &&
-        (y & 1) === 0 &&
-        dy > -0.55 &&
-        dy < 0.45
-      ) {
-        amt += 0.15;
+      const sx = x - xPed;
+      if (look.len >= 14 && u > 0.1 && u < 0.74 && dy > -0.6 && dy < 0.5) {
+        const row = (y & 1) === 0;
+        const cell = (sx + ((y >> 1) & 1) * 2) % 4;
+        if (row && cell === 0) amt += 0.14;
+        else if (row && cell === 3) amt -= 0.1;
       }
-      // Lateral line running along flank
+      // Lateral line: pale dotted dashes along the flank
       const latY = yMid - span * 0.08 + Math.sin(u * Math.PI) * 0.6;
-      if (look.len >= 18 && u > 0.08 && u < 0.68 && Math.abs(y - latY) < 0.55 && x % 2 === 0) {
-        amt -= 0.18;
+      if (look.len >= 16 && u > 0.08 && u < 0.68 && Math.abs(y - latY) < 0.55 && x % 3 === 0) {
+        amt += 0.22;
       }
+      // Organic speckle for texture
+      if (rnd() < 0.05) amt += rnd() < 0.5 ? 0.08 : -0.08;
       if (dy > 0.78) amt -= 0.2;
       if (dy < -0.78) amt += 0.1;
       g.set(x, y, amt ? adj(col, amt) : col);
@@ -481,9 +490,14 @@ export function makeFish(look: FishLook): FishSprite {
       const openTop = cleftY - Math.round(t * maxOpen * 0.55);
       const openBot = cleftY + Math.round(t * maxOpen * 0.75);
 
-      // Carve interior gullet cavity
+      // Carve interior gullet cavity (dark throat -> deep red gullet)
       for (let y = openTop; y <= openBot; y++) {
-        g.set(x, y, y > cleftY ? "#3a0914" : "#18040a");
+        const depth = (y - openTop) / Math.max(1, openBot - openTop);
+        g.set(x, y, depth < 0.35 ? "#18040a" : depth < 0.7 ? "#3a0914" : "#4e0e1e");
+      }
+      // Tongue hint inside huge grins
+      if (look.mouth === "huge" && t > 0.3 && t < 0.85) {
+        g.set(x, openBot - 1, "#8a1e32");
       }
       // Draw hinged lower jawbone under the cavity so teeth sit ON a real jaw
       const jawThick = Math.max(1, Math.round(2.2 - t * 0.8));
@@ -499,12 +513,14 @@ export function makeFish(look: FishLook): FishSprite {
             : 1;
         for (let k = 0; k < fangH; k++) {
           g.set(x, openTop + k, tooth);
+          if (fangH >= 3 && k === 0) g.set(x - 1, openTop + k, adj(tooth, -0.18));
         }
       }
       if (t > 0.2 && (x - xHinge) % 2 === 1) {
         const fangH = look.fangs && x >= xSnout - 2 ? Math.min(openBot - openTop, 2) : 1;
         for (let k = 0; k < fangH; k++) {
           g.set(x, openBot - k, tooth);
+          if (fangH >= 2 && k === 0) g.set(x - 1, openBot - k, adj(tooth, -0.18));
         }
       }
     }
@@ -515,6 +531,8 @@ export function makeFish(look: FishLook): FishSprite {
       g.setIf(xSnout - i, my - 1, "#d8d0b0");
       g.setIf(xSnout - i, my, "#240a12");
       g.setIf(xSnout - i, my + 1, "#d8d0b0");
+      g.setIf(xSnout - i - 1, my - 1, "#a89e7e");
+      g.setIf(xSnout - i - 1, my + 1, "#a89e7e");
     }
   }
 
@@ -525,6 +543,7 @@ export function makeFish(look: FishLook): FishSprite {
     for (let y = Math.round(yt) + 2; y <= Math.round(yb) - 2; y++) {
       const curve = Math.round(Math.pow((y - ym) / Math.max(1, ry), 2) * 1.8);
       g.setIf(gx - curve, y, look.mouth === "huge" || look.fangs ? "#6e1426" : adj(look.dark, -0.28));
+      g.setIf(gx - curve - 2, y, adj(look.dark, -0.14));
     }
     // Swept pectoral fin behind gill cover
     if (shape !== "eel") {
@@ -533,7 +552,7 @@ export function makeFish(look: FishLook): FishSprite {
       const plen = Math.max(3, Math.round(look.len * 0.18));
       for (let i = 0; i < plen; i++) {
         const pyRow = py + Math.floor(i * 0.35);
-        g.setIf(px - i, pyRow, i === 0 ? finHi : look.fin);
+        g.setIf(px - i, pyRow, i === 0 ? finHi : i % 2 === 0 ? look.fin : adj(look.fin, 0.1));
         g.setIf(px - i, pyRow + 1, finDark);
       }
     }
@@ -545,6 +564,7 @@ export function makeFish(look: FishLook): FishSprite {
       const u = (x - xPed) / Math.max(1, look.len - 1);
       const [, yb, ym] = profile(u);
       g.setIf(x, Math.round((ym + yb) * 0.5), look.glow);
+      g.setIf(x + 2, Math.round((ym + yb) * 0.5) + 1, adj(look.glow, -0.2));
     }
   }
 
@@ -560,8 +580,18 @@ export function makeFish(look: FishLook): FishSprite {
       [-4, 1],
       [-5, 2],
       [-6, 3],
+      [-7, 3],
+      [-8, 2],
     ]) {
       g.set(xSnout + dx, wy + dy, look.fin);
+    }
+    for (const [dx, dy] of [
+      [-2, 1],
+      [-3, 2],
+      [-4, 2],
+      [-5, 1],
+    ]) {
+      g.set(xSnout + dx, wy + dy, adj(look.fin, -0.2));
     }
   }
 
@@ -575,12 +605,14 @@ export function makeFish(look: FishLook): FishSprite {
     case "dot":
       g.rect(ex, ey, 2, 2, "#f4f4f0");
       g.set(ex + 1, ey, "#0a0a12");
+      g.set(ex, ey, "#ffffff");
       eyeColor = "#9fe8ff";
       break;
     case "white":
       if (look.len >= 24) {
         g.rect(ex - 1, ey - 1, 3, 3, "#dffcff");
         g.set(ex, ey, "#06161c");
+        g.set(ex - 1, ey - 1, "#ffffff");
         eyeX = ex - 1;
       } else g.rect(ex, ey, 2, 2, "#e6ffff");
       eyeColor = "#e6ffff";
@@ -589,6 +621,7 @@ export function makeFish(look: FishLook): FishSprite {
       g.rect(ex - 1, ey - 1, 3, 3, "#f4f4f0");
       g.set(ex, ey, "#0a0a12");
       g.set(ex + 1, ey - 1, "#c8c8c0");
+      g.set(ex - 1, ey - 1, "#ffffff");
       eyeColor = "#ffffff";
       eyeX = ex - 1;
       break;
@@ -601,6 +634,7 @@ export function makeFish(look: FishLook): FishSprite {
     case "red":
       g.rect(ex - 1, ey - 1, 3, 3, "#8a0f1c");
       g.set(ex, ey, "#ff6a5a");
+      g.set(ex - 1, ey - 1, "#ffb0a0");
       eyeColor = "#ff3b3b";
       eyeX = ex - 1;
       break;
@@ -635,6 +669,12 @@ export function makeFish(look: FishLook): FishSprite {
     }
     g.rect(bx - 1, by - 1, 3, 3, look.glow || "#9dfcff");
     g.set(bx, by, "#ffffff");
+    // soft halo around the bulb
+    const halo = look.glow || "#9dfcff";
+    g.set(bx - 2, by, halo);
+    g.set(bx + 2, by, halo);
+    g.set(bx, by - 2, halo);
+    g.set(bx, by + 2, halo);
     lure = { x: bx, y: by };
   }
 
@@ -686,31 +726,53 @@ export function boatSprite(): HTMLCanvasElement {
       let c = "#6a4326";
       const r = y - 19;
       if (r >= 0 && r % 3 === 2) c = "#4b2e19";
-      if (y === top) c = "#a56f3f";
+      if (y === top) c = "#c48a4a";
       else if (y === top + 1) c = "#86593a";
       if (x % 9 === 4 && y > top + 1) c = "#4b2e19";
+      if (y === bottom) c = "#3a2412";
       g.set(x, y, c);
     }
+    // nail dots along the plank seams
+    if (x % 9 === 4) g.set(x, top + 2, "#2b1a0c");
   }
+  // deck planks
   g.rect(20, 17, 12, 2, "#8a5e36");
+  g.rect(20, 18, 12, 1, "#6e482a");
+  // crate with shading
   g.rect(38, 13, 8, 5, "#7a5430");
   g.rect(38, 13, 8, 1, "#9a6c3c");
   g.rect(41, 13, 1, 5, "#4b2e19");
   g.rect(38, 15, 8, 1, "#4b2e19");
+  g.rect(38, 17, 8, 1, "#5e4022");
+  // bucket
+  g.rect(48, 15, 4, 4, "#5a6a72");
+  g.rect(48, 15, 4, 1, "#8aa0ac");
+  g.set(49, 17, "#3a464c");
+  // rope coil
+  g.rect(13, 16, 5, 3, "#a89060");
+  g.set(14, 17, "#6e5a38");
+  g.set(16, 17, "#6e5a38");
+  // fisherman's seat + body
   g.rect(28, 14, 6, 3, "#2b3a52");
   g.rect(33, 15, 2, 3, "#1a1a20");
   g.rect(22, 10, 8, 8, "#e3a92b");
   g.rect(28, 10, 2, 8, "#b8821a");
   g.rect(22, 15, 8, 1, "#b8821a");
+  g.rect(22, 11, 8, 1, "#f0c040");
+  // head + hat
   g.rect(23, 6, 5, 4, "#e2bd9d");
   g.set(26, 7, "#1a1a22");
   g.set(27, 9, "#b88f74");
+  g.set(24, 7, "#c89a7a");
   g.rect(21, 5, 9, 1, "#c4891a");
   g.rect(23, 2, 5, 3, "#d9a02a");
   g.rect(23, 4, 5, 1, "#8c5e12");
+  g.set(25, 3, "#f0d060");
+  // arm + rod hand
   g.line(28, 12, 33, 13, "#e3a92b");
   g.line(28, 13, 32, 14, "#b8821a");
   g.set(33, 13, "#e2bd9d");
+  // lantern post + lamp + halo
   g.rect(5, 9, 1, 10, "#2b2118");
   g.rect(3, 3, 5, 1, "#2b2118");
   g.rect(3, 4, 1, 5, "#2b2118");
@@ -718,6 +780,14 @@ export function boatSprite(): HTMLCanvasElement {
   g.rect(3, 9, 5, 1, "#2b2118");
   g.rect(4, 4, 3, 5, "#ffcf5a");
   g.rect(5, 5, 1, 3, "#fff6c8");
+  g.set(4, 3, "#ffcf5a");
+  g.set(6, 3, "#ffcf5a");
+  g.set(3, 6, "#ffcf5a");
+  g.set(7, 6, "#ffcf5a");
+  // little pennant flag on the stern
+  g.rect(52, 10, 1, 9, "#2b2118");
+  g.rect(53, 10, 4, 2, "#c03040");
+  g.rect(53, 12, 3, 1, "#8a1a28");
   g.outline("#0a0710");
   boatC = g.canvas();
   return boatC;
@@ -751,7 +821,9 @@ export function lurkerSprite(frame: number): HTMLCanvasElement {
     for (let y = Math.round(cy - half); y <= Math.round(cy + half); y++) {
       const d = Math.abs(y - cy);
       if (d < notch) continue;
-      g.set(x, y, d % 2 === 0 ? "#4a2238" : "#2b1424");
+      const ray = Math.round(d) % 2 === 0;
+      g.set(x, y, ray ? "#4a2238" : "#2b1424");
+      if (t > 0.85 && d > half - 1.5) g.set(x, y, "#c890a8");
     }
   }
 
@@ -787,8 +859,11 @@ export function lurkerSprite(frame: number): HTMLCanvasElement {
     for (let y = yt; y <= yb; y++) {
       const dy = (y - ym) / Math.max(1, topH);
       // Translucent corpse-pale deep-sea flesh with dark spine & crimson ribs
-      let col = dy < -0.35 ? "#354654" : dy > 0.4 ? "#70828c" : "#9cb0b8";
+      let col =
+        dy < -0.55 ? "#2a3a48" : dy < -0.35 ? "#354654" : dy > 0.55 ? "#5e707c" : dy > 0.4 ? "#70828c" : "#9cb0b8";
       if (u < 0.68 && x % 3 === 0 && Math.abs(dy) < 0.55) col = "#542232";
+      // scale shimmer
+      if (u > 0.15 && u < 0.7 && ((x + ((y >> 1) & 1) * 2) % 4 === 0) && (y & 1) === 0) col = adj(col, 0.1);
       g.set(x, y, col);
     }
   }
@@ -799,20 +874,26 @@ export function lurkerSprite(frame: number): HTMLCanvasElement {
     const t = (x - 28) / 11;
     const topY = 11;
     const botY = 12 + Math.round(t * jawOpen);
-    for (let y = topY; y <= botY; y++) g.set(x, y, "#1c040a");
+    for (let y = topY; y <= botY; y++) {
+      const depth = (y - topY) / Math.max(1, botY - topY);
+      g.set(x, y, depth < 0.4 ? "#1c040a" : "#3a0914");
+    }
     g.set(x, botY + 1, "#6b7c85");
     if (x % 2 === 0) {
       g.set(x, topY, "#f2efe0");
       g.set(x, topY + 1, "#f2efe0");
       g.set(x, botY, "#f2efe0");
+      g.set(x - 1, topY, adj("#f2efe0", -0.18));
     }
   }
 
   // Twin glowing crimson predator eyes + gill slits
   g.rect(30, 7, 3, 3, "#140206");
   g.set(31, 8, "#ff3b3b");
+  g.set(30, 7, "#ffb0a0");
   g.rect(34, 8, 2, 2, "#140206");
   g.set(35, 9, "#ff3b3b");
+  g.set(34, 8, "#ffb0a0");
   for (let k = 0; k < 3; k++) g.line(25 - k * 2, 9, 24 - k * 2, 14, "#5e1020");
 
   g.outline("#04060a");
@@ -985,18 +1066,14 @@ export function bossSprite(open: number, enraged: boolean): HTMLCanvasElement {
     let c = dy < -0.36 ? tones[2] : dy > 0.45 ? bellyCol : dy > 0.18 ? tones[0] : tones[1];
     // Diamond fish scale pattern across the trunk
     let amt = 0;
-    if (
-      x > 46 &&
-      x < 124 &&
-      (x + ((y >> 2) & 1) * 3) % 6 === 0 &&
-      y % 4 === 1 &&
-      dy > -0.55 &&
-      dy < 0.45
-    ) {
-      amt = 0.18;
+    if (x > 46 && x < 124 && dy > -0.55 && dy < 0.45) {
+      const cell = (x + ((y >> 2) & 1) * 3) % 6;
+      if (cell === 0 && y % 4 === 1) amt = 0.18;
+      else if (cell === 5 && y % 4 === 1) amt = -0.12;
     }
     if (dy > 0.72) amt -= 0.22;
     if (rnd() < 0.015) amt -= 0.28;
+    if (rnd() < 0.02) amt += 0.1;
     return amt ? adj(c, amt) : c;
   };
 
@@ -1082,6 +1159,7 @@ export function bossSprite(open: number, enraged: boolean): HTMLCanvasElement {
       const gx = 58 + k * 3 + curve;
       g.setIf(gx, y, k === 0 ? "#06040a" : "#7e162c");
       g.setIf(gx + 1, y, "#06040a");
+      if (k === 3) g.setIf(gx + 2, y, "#a82a40");
     }
   }
 
@@ -1131,6 +1209,7 @@ export function bossSprite(open: number, enraged: boolean): HTMLCanvasElement {
     if (Math.abs(y - ey) <= 2) g.set(ex - 1, y, "#0b0204");
   }
   g.set(ex - 3, ey - 2, "#ffffff");
+  g.set(ex + 2, ey + 2, "#ffffff");
   // Armored brow ridge slanting menacingly forward
   for (let dx = -8; dx <= 8; dx++) {
     const yb = ey - 6 + Math.round(((8 - dx) / 16) * 3);
@@ -1159,6 +1238,10 @@ export function bossSprite(open: number, enraged: boolean): HTMLCanvasElement {
   }
   g.ellipse(P2[0], P2[1], 4.5, 4.5, enraged ? "#ff5a4a" : "#9dfcff");
   g.ellipse(P2[0], P2[1], 2, 2, "#ffffff");
+  g.set(P2[0] - 5, P2[1], enraged ? "#ff5a4a" : "#9dfcff");
+  g.set(P2[0] + 5, P2[1], enraged ? "#ff5a4a" : "#9dfcff");
+  g.set(P2[0], P2[1] - 5, enraged ? "#ff5a4a" : "#9dfcff");
+  g.set(P2[0], P2[1] + 5, enraged ? "#ff5a4a" : "#9dfcff");
 
   g.outline("#04060a");
   const c = g.canvas();
@@ -1172,7 +1255,7 @@ let dartC: HTMLCanvasElement | null = null;
 export function boneDartSprite(): HTMLCanvasElement {
   if (dartC) return dartC;
   dartC = fromRows(
-    ["....#....W...", "..#####.WWW..", "#WWWWWWWRWWWW", "..#####.WWW..", "....#....W..."],
+    [".....#.....W...", "...#####..WWW..", "#WWWWWWWRWWWWW#", "...#####..WWW..", ".....#.....W..."],
     { "#": "#9a86a8", W: "#ece6cf", R: "#ff3a3a" }
   );
   return dartC;
@@ -1186,11 +1269,19 @@ export function moonSprite(blood: boolean): HTMLCanvasElement {
   const base = blood ? "#d9503e" : "#eef1da";
   const shade = blood ? "#a82c2a" : "#cfd6bb";
   const crater = blood ? "#7a1a1c" : "#b8c0a2";
-  g.ellipse(13, 13, 12.5, 12.5, (x, y) => (x + y > 29 ? shade : base));
+  const hi = blood ? "#f08060" : "#ffffff";
+  g.ellipse(13, 13, 12.5, 12.5, (x, y) => {
+    const t = (x + y - 4) / 44;
+    return t > 0.72 ? shade : t > 0.5 ? base : hi;
+  });
   g.ellipse(8, 8, 2.6, 2.2, crater);
   g.ellipse(17, 14, 3.2, 2.6, crater);
   g.ellipse(10, 18, 2, 1.6, crater);
   g.ellipse(18, 7, 1.4, 1.2, crater);
+  g.ellipse(6, 15, 1.6, 1.3, crater);
+  g.ellipse(20, 19, 1.8, 1.4, crater);
+  g.ellipse(14, 5, 1.2, 1, crater);
+  g.ellipse(5, 11, 1.1, 0.9, crater);
   moonCache[key] = g.canvas();
   return moonCache[key];
 }
@@ -1206,29 +1297,33 @@ let icons: Icons | null = null;
 export function getIcons(): Icons {
   if (icons) return icons;
   icons = {
-    heart: fromRows([".##.##.", "#RRRRR#", "#RRWRR#", ".#RRR#.", "..#R#..", "...#..."], {
+    heart: fromRows([".##.##.", "#RWRRR#", "#RRRRR#", ".#RRR#.", "..#r#..", "...#..."], {
       "#": "#4a0a12",
       R: "#ee3b4a",
       W: "#ffb0b8",
+      r: "#a82030",
     }),
     heartEmpty: fromRows([".##.##.", "#.....#", "#.....#", ".#...#.", "..#.#..", "...#..."], {
       "#": "#5a3a44",
     }),
-    coin: fromRows(["..##..", ".#YY#.", "#YWYY#", "#YYYY#", ".#YY#.", "..##.."], {
+    coin: fromRows(["..##..", ".#YY#.", "#YWYY#", "#YYYy#", ".#YYy#", "..##.."], {
       "#": "#8a5a10",
       Y: "#ffd23f",
       W: "#fff4b0",
+      y: "#c89a20",
     }),
-    eye: fromRows(["..###..", ".#WWW#.", "#WWRKW#", ".#WWW#.", "..###.."], {
+    eye: fromRows(["..###..", ".#WWW#.", "#WWRKW#", ".#WwW#.", "..###.."], {
       "#": "#3a0a12",
       W: "#f1e6df",
       R: "#d02a30",
       K: "#12050a",
+      w: "#c8b8b0",
     }),
-    skull: fromRows([".#####.", "#WWWWW#", "#KWWKW#", "#WWWWW#", ".#WKW#.", "..#W#.."], {
+    skull: fromRows([".#####.", "#WWWWW#", "#KWWKW#", "#WWWWW#", ".#WKW#.", "..#w#.."], {
       "#": "#2a2a30",
       W: "#e6e2cf",
       K: "#0a0a10",
+      w: "#b8b4a4",
     }),
   };
   return icons;

@@ -88,18 +88,6 @@ function drawBtn(ctx: CanvasRenderingContext2D, g: Game, b: Btn, pressed = false
         ctx.fillRect(Math.round(cx) - 3 + Math.abs(j), Math.round(cy) + j + po, 7 - Math.abs(j), 1);
       else ctx.fillRect(Math.round(cx) - 3, Math.round(cy) + j + po, 7 - Math.abs(j), 1);
     }
-  } else if (b.icon === "down") {
-    ctx.fillStyle = txt;
-    const c = Math.round(cx);
-    const d = Math.round(cy) - 3 + po;
-    for (let j = 0; j < 7; j++) {
-      const w = 7 - j;
-      ctx.fillRect(c - Math.floor(w / 2), d + j, w, 1);
-    }
-    drawText(ctx, "DOWN", cx, y + h - 9 + po, {
-      color: txt,
-      align: "center",
-    });
   } else if (b.icon === "reel") {
     const r = h >= 40 ? 8 : 6;
     const ccy = Math.round(y + h / 2 - (h >= 40 ? 5 : 4)) + po;
@@ -144,21 +132,6 @@ function drawBtn(ctx: CanvasRenderingContext2D, g: Game, b: Btn, pressed = false
         align: "center",
       });
     }
-  } else if (b.icon === "twitch") {
-    const ready = g.twitchCd <= 0;
-    const c = Math.round(cx);
-    const d = Math.round(cy) - 3 + po;
-    ctx.fillStyle = ready ? "#9dfcff" : "#5a6a70";
-    ctx.fillRect(c, d - 3, 1, 5);
-    ctx.fillRect(c + 1, d + 2, 2, 1);
-    ctx.fillRect(c + 2, d, 1, 2);
-    // ripple arcs
-    ctx.fillRect(c - 4, d - 1, 1, 3);
-    ctx.fillRect(c + 5, d - 1, 1, 3);
-    drawText(ctx, "JERK", cx, y + h - 9 + po, {
-      color: ready ? "#cfefff" : "#6a7a84",
-      align: "center",
-    });
   } else if (b.icon === "sound") {
     ctx.fillStyle = txt;
     const c = Math.round(cx);
@@ -430,21 +403,6 @@ function drawControls(ctx: CanvasRenderingContext2D, g: Game) {
       },
       g.inp.reel
     );
-    drawBtn(
-      ctx,
-      g,
-      {
-        id: "down",
-        x: W - m - rs,
-        y: H - m - rs - bs - 5,
-        w: rs,
-        h: bs,
-        icon: "down",
-        hold: true,
-        kind: "normal",
-      },
-      g.inp.down
-    );
     if (!g.bossBeaten || mode === "boss") {
       drawBtn(ctx, g, {
         id: "flash",
@@ -454,18 +412,6 @@ function drawControls(ctx: CanvasRenderingContext2D, g: Game) {
         h: bs,
         icon: "flash",
         kind: "ghost",
-      });
-    }
-    if (mode === "sink") {
-      const flashOffset = !g.bossBeaten ? bs + 4 : 0;
-      drawBtn(ctx, g, {
-        id: "twitch",
-        x: W - m - rs - flashOffset - bs - 5,
-        y: H - m - bs,
-        w: bs,
-        h: bs,
-        icon: "twitch",
-        kind: "normal",
       });
     }
   }
@@ -541,8 +487,8 @@ function drawStateHud(ctx: CanvasRenderingContext2D, g: Game) {
 
   if (g.mode === "sink" && (g.sinkTime < 14 || g.stats.caught < 2)) {
     const t = g.isTouch
-      ? "STEER WITH ARROWS. JERK LURES FISH. REEL RISES. DOWN DIVES."
-      : "A/D STEER. E JERKS BAIT. SPACE RISES. S DIVES.";
+      ? "STEER WITH ARROWS. REEL RISES."
+      : "A/D STEER. SPACE RISES.";
     centered(ctx, t, W / 2, hintY, W - 16, "#9fb6c4");
   }
 
@@ -970,7 +916,7 @@ function drawTitle(ctx: CanvasRenderingContext2D, g: Game) {
     });
   const foot = g.isTouch
     ? "HEADPHONES RECOMMENDED. SOUND ON."
-    : "A/D STEER  SPACE REEL  E JERK  F FLASH  S SHOP";
+    : "A/D STEER  SPACE REEL  F FLASH  S SHOP";
   const fl = wrapText(foot, W - 12).length;
   centered(ctx, foot, W / 2, H - 6 - fl * 9, W - 12, "#4a6076");
 }

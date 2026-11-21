@@ -226,8 +226,6 @@ export class Game {
   hurtFx = 0;
   flashT = 0;
   flashCd = 0;
-  twitchT = 0;
-  twitchCd = 0;
   invuln = 0;
   glitch = 0;
   hull = 4;
@@ -240,7 +238,7 @@ export class Game {
   keys = new Set<string>();
   held = new Map<number, string>();
   drag: { id: number; x: number } | null = null;
-  inp = { left: false, right: false, down: false, reel: false };
+  inp = { left: false, right: false, reel: false };
   reelLock = false;
   btns: Btn[] = [];
   isTouch = false;
@@ -523,7 +521,6 @@ export class Game {
       else this.onButton("log");
     }
     if (code === "Escape" && this.shopOpen) this.onButton("closeshop");
-    if (code === "KeyE" && this.mode === "sink") this.onButton("twitch");
     if (code === "KeyF" || code === "ShiftLeft" || code === "ShiftRight") this.onButton("flash");
     if (code === "KeyC" && this.mode === "idle" && this.dread >= 45 && !this.bossBeaten)
       this.onButton("call");
@@ -590,9 +587,6 @@ export class Game {
       case "flash":
         this.doFlash();
         break;
-      case "twitch":
-        this.doTwitch();
-        break;
       case "mute":
         this.sfx.setMuted(!this.sfx.muted);
         break;
@@ -649,7 +643,6 @@ export class Game {
     };
     this.inp.left = k.has("ArrowLeft") || k.has("KeyA") || hold("left");
     this.inp.right = k.has("ArrowRight") || k.has("KeyD") || hold("right");
-    this.inp.down = k.has("ArrowDown") || k.has("KeyS") || hold("down");
     const raw = k.has("Space") || k.has("ArrowUp") || k.has("KeyW") || k.has("KeyR") || hold("reel");
     if (this.reelLock && !raw) this.reelLock = false;
     this.inp.reel = raw && !this.reelLock;
@@ -678,17 +671,6 @@ export class Game {
     if (this.inp.reel) this.reelLock = true;
     this.sfx.splash();
     this.emit(10, tip.x, 0, { spread: 0.8, speed: 55, col: "#bfe3f0" });
-  }
-
-  /** Lure Jerk / Twitch: snaps the bait upward, emits a sonic ripple, and attracts fish from 2x range! */
-  doTwitch() {
-    if (this.mode !== "sink" || this.twitchCd > 0) return;
-    this.twitchT = 2.0;
-    this.twitchCd = 1.4;
-    this.hook.y = Math.max(4, this.hook.y - 7);
-    this.ripples.push({ x: this.hook.x, y: this.hook.y, r: 2, maxR: 42, col: "#9dfcff" });
-    this.emit(7, this.hook.x, this.hook.y, { speed: 28, col: "#9dfcff", grav: -15, max: 0.55 });
-    this.sfx.click();
   }
 
   private tryHookset() {
@@ -844,8 +826,7 @@ export class Game {
 
   private updateFish(dt: number) {
     const inSink = this.mode === "sink";
-    const twitchMult = this.twitchT > 0 ? 1.85 : 1;
-    const sense = (1 + this.lv.bait * 0.12) * twitchMult;
+    const sense = 1 + this.lv.bait * 0.12;
     for (let i = this.fish.length - 1; i >= 0; i--) {
       const f = this.fish[i];
       if (f.hooked) continue;
@@ -862,7 +843,7 @@ export class Game {
         if (d < range && this.hook.y > 10) f.chase = true;
         else if (d > range * 1.5) f.chase = false;
         if (f.chase) {
-          const chaseBoost = this.twitchT > 0 ? 2.05 : 1.65;
+          const chaseBoost = 1.65;
           if (Math.abs(dx) > 3) {
             f.dir = dx > 0 ? 1 : -1;
             moveDir = f.dir;
@@ -916,8 +897,7 @@ export class Game {
     const fish = f.fish;
     const sp = fish.sp;
     f.hookT += dt;
-    const lettingOut = this.inp.down && !this.inp.reel;
-    const reeling = this.inp.reel && !lettingOut && f.hookT > 0.25;
+    const reeling = this.inp.reel && f.hookT > 0.25;
     if (this.inp.reel && !f.hooksetDone && f.hookT <= 0.65) this.tryHookset();
 
     const wire = WIRE_MULT[this.lv.wire];
@@ -953,9 +933,6 @@ export class Game {
       if (reeling) {
         f.tension += (40 + 25 * sp.str) * wire * counterMult * dt;
         f.r += rate * 0.32 * dt;
-      } else if (lettingOut) {
-        f.tension -= 55 * dt;
-        f.r -= (0.22 + 0.08 * sp.str) * counterMult * dt;
       } else {
         f.tension -= (f.countering ? 34 : 25) * dt;
         f.r -= (0.11 + 0.05 * sp.str) * counterMult * dt;
@@ -965,9 +942,6 @@ export class Game {
       if (reeling) {
         f.tension += 22 * wire * dt;
         f.r += rate * dt;
-      } else if (lettingOut) {
-        f.tension -= 55 * dt;
-        f.r -= 0.14 * sp.str * dt;
       } else {
         f.tension -= 38 * dt;
         f.r -= 0.03 * sp.str * dt;
@@ -978,7 +952,7 @@ export class Game {
     this.hook.y = clamp(f.D * (1 - f.r), 0, FLOOR_Y);
     this.keepClearOfBoat(dt);
 
-    if (reeling || lettingOut) this.tickReel(dt);
+    if (reeling) this.tickReel(dt);
 
     if (f.tension >= 100) {
       this.snapLine("LINE SNAPPED!");
@@ -1508,8 +1482,7 @@ export class Game {
     // Reel / damage + Power Zone bonus
     const wire = WIRE_MULT[this.lv.wire];
     const reelMult = REEL_MULT[this.lv.reel];
-    const lettingOut = this.inp.down && !this.inp.reel;
-    const reeling = this.inp.reel && !lettingOut && b.jam <= 0;
+    const reeling = this.inp.reel && b.jam <= 0;
     b.jam = Math.max(0, b.jam - dt);
     b.powerReel = reeling && b.st !== "thrash" && b.tension >= 50 && b.tension <= 82;
     if (reeling) {
@@ -1522,10 +1495,6 @@ export class Game {
         (b.powerReel ? 1.45 : 1) *
         (thrash ? 0.25 : 1);
       b.hp -= base * dt;
-      this.tickReel(dt);
-    } else if (lettingOut) {
-      b.tension -= 60 * dt;
-      if (b.stun <= 0) b.hp = Math.min(100, b.hp + 1.1 * dt);
       this.tickReel(dt);
     } else {
       b.tension -= 36 * dt;
@@ -1694,8 +1663,6 @@ export class Game {
     this.hurtFx = Math.max(0, this.hurtFx - dt * 1.4);
     this.flashT = Math.max(0, this.flashT - dt);
     this.flashCd = Math.max(0, this.flashCd - dt);
-    this.twitchT = Math.max(0, this.twitchT - dt);
-    this.twitchCd = Math.max(0, this.twitchCd - dt);
     this.glitch = Math.max(0, this.glitch - dt);
     if (this.mode !== "boss") this.invuln = Math.max(0, this.invuln - dt);
     this.bannerT = Math.max(0, this.bannerT - dt);
@@ -1716,7 +1683,7 @@ export class Game {
         this.sinkTime += dt;
         const reeling = this.inp.reel;
         const rise = 62 + this.lv.reel * 14;
-        const sinkSpd = this.inp.down ? 82 : 38;
+        const sinkSpd = 38;
         if (reeling) {
           this.hook.y -= rise * dt;
           this.tickReel(dt);
